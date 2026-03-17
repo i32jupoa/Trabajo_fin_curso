@@ -2,7 +2,6 @@
 import sys
 from PyQt6.QtWidgets import QApplication
 
-# Importación desde las carpetas (paquetes)
 from modelo.nutricion_model import ModeloNutricion
 from vista.principal_view import VistaPrincipal
 from controlador.main_controller import ControladorNutricion

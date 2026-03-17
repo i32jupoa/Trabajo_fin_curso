@@ -56,7 +56,7 @@ class VistaPrincipal(QMainWindow):
         layout_observables.addRow("Horas sueño:", self.spin_sueno)
         grupo_observables.setLayout(layout_observables)
 
-        # Hábitos Alimenticios (Nuevo)
+        # Hábitos Alimenticios
         grupo_dieta = QGroupBox("Frecuencia de Consumo")
         layout_dieta = QFormLayout()
         opciones_frecuencia = ["Diario", "3-4 veces/semana", "1-2 veces/semana", "Raramente / Nunca"]
@@ -115,7 +115,7 @@ class VistaPrincipal(QMainWindow):
         if self.chk_fatiga.isChecked(): sintomas.append("Fatiga extrema")
         if self.chk_cabello.isChecked(): sintomas.append("Caída de cabello severa")
         if self.chk_palidez.isChecked(): sintomas.append("Palidez")
-        if self.chk_unas.isChecked(): sintomas.append("Uñas frágiles")
+        if self.chk_unas.isChecked(): sintomas.append("Uñas frágiles con manchas")
         if self.chk_encias.isChecked(): sintomas.append("Sangrado frecuente de encías")
         if self.chk_calambres.isChecked(): sintomas.append("Calambres musculares")
         if self.chk_hormigueo.isChecked(): sintomas.append("Hormigueo en manos y pies")

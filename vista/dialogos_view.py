@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QTableWidget, QTableWidgetItem, QTextEdit, 
-                             QListWidget, QLabel, QHeaderView)
+                             QListWidget, QHeaderView)
 
 class DialogoHipotesis(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Hipótesis Posibles")
-        self.resize(500, 300)
+        self.resize(550, 300)
         layout = QVBoxLayout(self)
         self.tabla = QTableWidget(0, 3)
         self.tabla.setHorizontalHeaderLabels(["Hipótesis", "Probabilidad", "Estado"])
@@ -18,11 +18,10 @@ class DialogoHipotesis(QDialog):
         layout.addWidget(btn_cerrar)
 
 class DialogoTexto(QDialog):
-    # Reutilizable para Diagnóstico y Justificación
     def __init__(self, titulo, parent=None):
         super().__init__(parent)
         self.setWindowTitle(titulo)
-        self.resize(400, 300)
+        self.resize(450, 350)
         layout = QVBoxLayout(self)
         self.texto = QTextEdit()
         self.texto.setReadOnly(True)
@@ -53,7 +52,7 @@ class DialogoWeb(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Fuentes Web Utilizadas")
-        self.resize(600, 250)
+        self.resize(650, 250)
         layout = QVBoxLayout(self)
         self.tabla = QTableWidget(0, 3)
         self.tabla.setHorizontalHeaderLabels(["Título", "URL", "Fecha Acceso"])

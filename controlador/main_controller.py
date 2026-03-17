@@ -17,11 +17,20 @@ class ControladorNutricion:
         self.vista.radio_web.toggled.connect(self.cambiar_modo)
 
     def actualizar_modelo_y_simular(self):
-        # Actualiza el modelo con la interfaz y lanza el LLM
+        # 1. Extraer datos de la vista
         sintomas = self.vista.obtener_sintomas_marcados()
         imc = self.vista.spin_imc.value()
         sueno = self.vista.spin_sueno.value()
-        self.modelo.actualizar_datos_paciente(sintomas, imc, sueno)
+        
+        dieta = {
+            "carne": self.vista.combo_carne.currentText(),
+            "pescado": self.vista.combo_pescado.currentText(),
+            "frutas_verduras": self.vista.combo_frutas.currentText(),
+            "lacteos": self.vista.combo_lacteos.currentText()
+        }
+
+        # 2. Inyectar en el modelo y simular LLM
+        self.modelo.actualizar_datos_paciente(sintomas, imc, sueno, dieta)
         self.modelo.simular_evaluacion_llm()
 
     def cambiar_modo(self):
@@ -30,7 +39,6 @@ class ControladorNutricion:
     def procesar_hipotesis(self):
         self.actualizar_modelo_y_simular()
         dialogo = DialogoHipotesis(self.vista)
-        # Rellenar tabla con el modelo
         dialogo.tabla.setRowCount(len(self.modelo.hipotesis))
         for row, (nombre, prob, estado) in enumerate(self.modelo.hipotesis):
             dialogo.tabla.setItem(row, 0, QTableWidgetItem(nombre))
@@ -52,29 +60,37 @@ class ControladorNutricion:
 
     def abrir_gestion_pdfs(self):
         dialogo = DialogoPDFs(self.vista)
-        # Poblar lista
         dialogo.lista_pdfs.addItems(self.modelo.pdfs_cargados)
         
-        # Conectar botones del diálogo
         def anadir_pdf():
-            ruta, _ = QFileDialog.getOpenFileName(dialogo, "Seleccionar PDF", "", "PDF Files (*.pdf)")
-            if ruta:
-                nombre_archivo = ruta.split("/")[-1]
-                self.modelo.pdfs_cargados.append(nombre_archivo)
-                dialogo.lista_pdfs.addItem(nombre_archivo)
+            rutas, _ = QFileDialog.getOpenFileNames(dialogo, "Seleccionar PDFs", "", "PDF Files (*.pdf)")
+            for ruta in rutas:
+                nombre = ruta.split("/")[-1]
+                if nombre not in self.modelo.pdfs_cargados:
+                    self.modelo.pdfs_cargados.append(nombre)
+                    dialogo.lista_pdfs.addItem(nombre)
+                    
+        def eliminar_pdf():
+            items_seleccionados = dialogo.lista_pdfs.selectedItems()
+            if not items_seleccionados: return
+            for item in items_seleccionados:
+                self.modelo.pdfs_cargados.remove(item.text())
+                dialogo.lista_pdfs.takeItem(dialogo.lista_pdfs.row(item))
                 
         def vaciar():
             self.modelo.pdfs_cargados.clear()
             dialogo.lista_pdfs.clear()
             
         dialogo.btn_anadir.clicked.connect(anadir_pdf)
+        dialogo.btn_eliminar.clicked.connect(eliminar_pdf)
         dialogo.btn_vaciar.clicked.connect(vaciar)
         dialogo.exec()
 
     def abrir_fuentes_web(self):
         if not self.modelo.modo_web:
-            QMessageBox.warning(self.vista, "Atención", "El modo web está desactivado.")
+            QMessageBox.warning(self.vista, "Atención", "El modo web está desactivado. Marque 'Modo Web' en la ventana principal.")
             return
+        
         self.actualizar_modelo_y_simular()
         dialogo = DialogoWeb(self.vista)
         dialogo.tabla.setRowCount(len(self.modelo.fuentes_web))
@@ -83,5 +99,3 @@ class ControladorNutricion:
             dialogo.tabla.setItem(row, 1, QTableWidgetItem(url))
             dialogo.tabla.setItem(row, 2, QTableWidgetItem(fecha))
         dialogo.exec()
-
-        
