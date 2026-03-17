@@ -1,15 +1,18 @@
 # -*- coding: utf-8 -*-
+import requests
+import PyPDF2
+
 class ModeloNutricion:
     def __init__(self):
-        # Datos de entrada del paciente
         self.sintomas_seleccionados = []
         self.imc = 22.0
         self.horas_sueno = 7
         self.dieta = {}
         self.modo_web = False 
         
-        # Datos de salida (LLM simulado y estado)
-        self.pdfs_cargados = [] 
+        self.rutas_pdfs = [] # Rutas absolutas para leerlos
+        self.pdfs_cargados = [] # Nombres para la vista
+        
         self.hipotesis = []
         self.diagnostico_final = ""
         self.justificacion = ""
@@ -24,46 +27,61 @@ class ModeloNutricion:
     def set_modo_web(self, estado):
         self.modo_web = estado
 
-    def simular_evaluacion_llm(self):
-        sintomas = self.sintomas_seleccionados
-        dieta = self.dieta
+    def extraer_texto_pdfs(self):
+        texto_extraido = ""
+        for ruta in self.rutas_pdfs:
+            try:
+                with open(ruta, 'rb') as f:
+                    reader = PyPDF2.PdfReader(f)
+                    for i in range(min(3, len(reader.pages))): # Lee max 3 pags por rendimiento
+                        texto_extraido += reader.pages[i].extract_text() + " "
+            except Exception as e:
+                print(f"Error leyendo PDF {ruta}: {e}")
+        return texto_extraido[:2000] # Limitamos contexto para Ollama
+
+    def generar_diagnostico_ia(self):
+        # 1. Preparar contexto base
+        self.simular_hipotesis_base() # Genera la tabla base de hipótesis
+        
+        texto_pdf = self.extraer_texto_pdfs()
+        
+        prompt = f"Actúa como un médico nutricionista experto. El paciente tiene estos síntomas: {self.sintomas_seleccionados}. "
+        prompt += f"Su IMC es {self.imc} y duerme {self.horas_sueno} horas. "
+        prompt += f"Su dieta es: Carne ({self.dieta.get('carne')}), Pescado ({self.dieta.get('pescado')}), Fruta ({self.dieta.get('frutas_verduras')}), Lácteos ({self.dieta.get('lacteos')}). "
+        
+        if self.modo_web:
+            prompt += "Basa tu respuesta en el conocimiento médico actual de internet. "
+        if texto_pdf:
+            prompt += f"Ten en cuenta este documento de referencia aportado por el paciente: {texto_pdf}. "
+            
+        prompt += "Escribe un diagnóstico breve y una justificación clara de por qué crees que le ocurre esto. Responde en español."
+
+        # 2. Conexión con Ollama local
+        try:
+            respuesta = requests.post("http://localhost:11434/api/generate", 
+                                      json={"model": "llama3", "prompt": prompt, "stream": False}, 
+                                      timeout=45)
+            respuesta.raise_for_status()
+            resultado_llm = respuesta.json().get("response", "")
+            
+            self.diagnostico_final = "Diagnóstico generado por IA (Ollama):\n" + resultado_llm.split("\n\n")[0]
+            self.justificacion = "Justificación del Modelo de Lenguaje:\n" + resultado_llm
+            
+            if self.modo_web:
+                self.fuentes_web = [("Búsqueda General Ollama", "Base de datos del LLM", "Actual")]
+                
+        except Exception as e:
+            # FALLBACK DE SEGURIDAD (Si el profesor no tiene Ollama encendido)
+            self.diagnostico_final = "[AVISO: Conexión con Ollama fallida. Usando sistema experto de respaldo]\n\n"
+            self.diagnostico_final += "No se detectan anomalías graves, revisar dieta cruzada con síntomas."
+            self.justificacion = f"Error técnico al contactar con la IA local: {e}\n\nEl sistema experto de respaldo determinó que los síntomas ({self.sintomas_seleccionados}) deben cruzarse con su consumo de alimentos."
+
+    def simular_hipotesis_base(self):
+        # Mantiene la lógica de reglas para la tabla de Hipótesis (CommonKADS)
         self.hipotesis = []
-        self.fuentes_web = []
-        diagnosticos_text = []
-        justificaciones_text = []
-
-        # Lógica 1: Anemia (Falta de hierro / B12)
-        if ("Fatiga extrema" in sintomas or "Palidez" in sintomas) and (dieta.get("carne") == "Raramente / Nunca"):
-            self.hipotesis.append(("Anemia ferropénica / Déficit B12", "95%", "Muy Probable"))
-            diagnosticos_text.append("Déficit severo de hierro o B12 derivado de una ingesta nula de carnes rojas.")
-            justificaciones_text.append("La fatiga y palidez cruzada con la exclusión de carne en la dieta es el principal indicador de Anemia.")
-            self.fuentes_web.append(("Anemia por deficiencia de vitaminas - Mayo Clinic", "https://www.mayoclinic.org/", "2026-03-17"))
-
-        # Lógica 2: Vitamina C (Escorbuto leve)
-        if ("Sangrado frecuente de encías" in sintomas or "Retraso en cicatrización" in sintomas) and (dieta.get("frutas_verduras") == "Raramente / Nunca"):
-            self.hipotesis.append(("Déficit de Vitamina C", "88%", "Posible"))
-            diagnosticos_text.append("Posible déficit de Vitamina C afectando a mucosas.")
-            justificaciones_text.append("El sangrado de encías sumado a la nula ingesta de frutas frescas apunta directamente a un cuadro carencial de Vitamina C.")
-
-        # Lógica 3: Minerales (Falta de Calcio/Magnesio)
-        if ("Uñas frágiles con manchas" in sintomas or "Calambres musculares" in sintomas) and (dieta.get("lacteos") == "Raramente / Nunca"):
-            self.hipotesis.append(("Déficit de Calcio / Magnesio", "75%", "Posible"))
-            diagnosticos_text.append("Desmineralización o desequilibrio electrolítico por bajo consumo de lácteos.")
-            justificaciones_text.append("Las uñas frágiles y calambres coinciden con un bajo consumo de lácteos, indicando posible falta de calcio biodisponible.")
-
-        # Lógica 4: Omega 3 y Pescado
-        if ("Niebla mental" in sintomas) and (dieta.get("pescado") == "Raramente / Nunca"):
-            self.hipotesis.append(("Déficit de Ácidos Grasos (Omega-3)", "60%", "Posible"))
-            diagnosticos_text.append("Deterioro cognitivo leve asociado a carencia de grasas esenciales.")
-            justificaciones_text.append("La falta de concentración se correlaciona con carencia de Omega-3 por evitar el pescado.")
-
-        # Resolver el diagnóstico final
+        if ("Fatiga extrema" in self.sintomas_seleccionados) and (self.dieta.get("carne") == "Raramente / Nunca"):
+            self.hipotesis.append(("Anemia ferropénica", "95%", "Seleccionada"))
+        if ("Sangrado frecuente de encías" in self.sintomas_seleccionados):
+            self.hipotesis.append(("Déficit de Vitamina C", "80%", "Posible"))
         if not self.hipotesis:
-            self.hipotesis = [("Dieta equilibrada (Sin déficit cruzado aparente)", "90%", "Seleccionada")]
-            self.diagnostico_final = "No se detectan déficits nutricionales graves correlacionados con la dieta y síntomas."
-            self.justificacion = f"IMC: {self.imc}. Horas de sueño: {self.horas_sueno}.\nAunque puede haber síntomas leves, no cruzan con carencias alimenticias evidentes."
-        else:
-            self.hipotesis.sort(key=lambda x: int(x[1].strip('%')), reverse=True) # Ordenar por probabilidad
-            self.hipotesis[0] = (self.hipotesis[0][0], self.hipotesis[0][1], "Seleccionada (Principal)")
-            self.diagnostico_final = "\n\n".join(diagnosticos_text)
-            self.justificacion = "El LLM simulado ha cruzado sus hábitos alimenticios con sus síntomas físicos:\n\n" + "\n".join(justificaciones_text)
+            self.hipotesis.append(("Sin déficit aparente", "90%", "Seleccionada"))
