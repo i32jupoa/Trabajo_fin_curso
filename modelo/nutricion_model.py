@@ -42,27 +42,32 @@ class ModeloNutricion:
     def generar_diagnostico_ia(self):
         self.simular_hipotesis_base() 
         
-        # --- AQUÍ ESTÁ LA MAGIA DEL MODO RESPALDO ---
-        # Si el usuario marca "Modo Respaldo", el programa entra aquí, 
-        # genera el texto local al instante y NO llama a la IA.
         if not self.modo_web:
             self._generar_diagnostico_fallback()
             return
-        # ---------------------------------------------
 
         texto_pdf = self.extraer_texto_pdfs()
         
-        # PROMPT OPTIMIZADO PARA TINYLLAMA
-        prompt = f"Actúa como un médico nutricionista experto. Perfil del paciente: IMC de {self.imc}, duerme {self.horas_sueno} horas/día. "
-        prompt += f"Síntomas: {', '.join(self.sintomas_seleccionados) if self.sintomas_seleccionados else 'Asintomático'}. "
-        prompt += f"Frecuencia semanal de dieta: Bollería/basura {self.dieta.get('bolleria', '0 días')} a la semana, "
-        prompt += f"verduras {self.dieta.get('verduras', '0 días')} a la semana, carne {self.dieta.get('carne', '0 días')}, "
-        prompt += f"pescado {self.dieta.get('pescado', '0 días')}. "
+        # PROMPT DE INGENIERÍA CLÍNICA (FUERZA ESTRUCTURA PROFESIONAL)
+        prompt = (
+            "EMITE UN INFORME MÉDICO NUTRICIONAL FORMAL EN ESPAÑOL.\n\n"
+            "DATOS TÉCNICOS:\n"
+            f"- IMC: {self.imc} | Sueño: {self.horas_sueno}h.\n"
+            f"- Síntomas: {', '.join(self.sintomas_seleccionados) if self.sintomas_seleccionados else 'Asintomático'}.\n"
+            f"- Frecuencia Dieta: Basura {self.dieta.get('bolleria')}, Verduras {self.dieta.get('verduras')}, "
+            f"Carne {self.dieta.get('carne')}, Pescado {self.dieta.get('pescado')}.\n"
+        )
         
-        if self.modo_web: prompt += "Basa tu respuesta en evidencia médica clínica. "
-        if texto_pdf: prompt += f"Aplica este conocimiento extraído de un PDF: {texto_pdf}. "
+        if texto_pdf: prompt += f"CONTEXTO ADICIONAL (PDF): {texto_pdf}\n\n"
             
-        prompt += "Proporciona un Diagnóstico claro y una Justificación de por qué su dieta, sueño e IMC causan estos síntomas. Responde en español."
+        prompt += (
+            "ESCRIBE EL INFORME SIGUIENDO ESTE ESQUEMA EXACTO:\n"
+            "1. IMPRESIÓN CLÍNICA: (Análisis del estado nutricional actual)\n"
+            "2. CORRELACIÓN DIETA-SÍNTOMAS: (Explica por qué su alimentación causa esos signos físicos)\n"
+            "3. VALORACIÓN DEL DESCANSO: (Impacto de las horas de sueño en su metabolismo)\n"
+            "4. RECOMENDACIÓN:\n\n"
+            "INFORME MÉDICO:\n"
+        )
 
         try:
             respuesta = requests.post("http://localhost:11434/api/generate", 
@@ -70,8 +75,12 @@ class ModeloNutricion:
             respuesta.raise_for_status()
             resultado_llm = respuesta.json().get("response", "")
             
-            self.diagnostico_final = "DIAGNÓSTICO IA (TinyLlama):\n" + resultado_llm.split("\n\n")[0]
-            self.justificacion = "JUSTIFICACIÓN CLÍNICA (TinyLlama):\n" + resultado_llm
+            # Limpiamos posibles restos del prompt que la IA a veces repite
+            limpio = resultado_llm.replace("INFORME MÉDICO:", "").strip()
+            
+            self.diagnostico_final = "DIAGNÓSTICO AVANZADO (Inteligencia Artificial):\n" + limpio.split("2.")[0]
+            self.justificacion = "ANÁLISIS CLÍNICO DETALLADO (TinyLlama):\n" + limpio
+            
             if self.modo_web:
                 self.fuentes_web = [("Análisis Nutricional IA", "Base de datos LLM Interna", "Actual")]
                 
@@ -112,26 +121,54 @@ class ModeloNutricion:
         self.hipotesis.sort(key=lambda x: int(x[1].replace('%','')), reverse=True)
 
     def _generar_diagnostico_fallback(self):
-        self.diagnostico_final = "[MODO EXPERTO LOCAL - Basado en Reglas Estrictas]\n\n"
-        self.justificacion = "[RAZONAMIENTO DEL SISTEMA EXPERTO LOCAL]\n"
+        """Genera un informe clínico profesional basado en el motor de reglas local"""
+        self.diagnostico_final = "INFORME DEL SISTEMA EXPERTO LOCAL (Reglas Clínicas)\n"
+        self.diagnostico_final += "================================================\n\n"
         
-        cat_imc = "Normal"
-        if self.imc < 18.5: cat_imc = "Bajo Peso (Riesgo de desnutrición)"
-        elif self.imc >= 25 and self.imc < 30: cat_imc = "Sobrepeso"
-        elif self.imc >= 30: cat_imc = "Obesidad (Riesgo cardiovascular)"
-
-        self.justificacion += f"- Evaluación Biométrica: IMC de {self.imc} ({cat_imc}).\n"
-        self.justificacion += f"- Evaluación del Descanso: {self.horas_sueno} horas diarias. "
-        self.justificacion += "Insuficiente para recuperación celular.\n" if self.horas_sueno < 6 else "Adecuado.\n"
-
-        if len(self.hipotesis) > 0 and self.hipotesis[0][0] != "Estado Nutricional Aparentemente Adecuado":
-            self.diagnostico_final += f"El paciente presenta: {self.hipotesis[0][0]}.\n"
-            if len(self.hipotesis) > 1: self.diagnostico_final += f"Comorbilidad asociada: {self.hipotesis[1][0]}.\n"
-            
-            self.justificacion += "\nCruces detectados (Síntomas vs Dieta):\n"
-            if self.dieta.get('bolleria') in ["3-4 días", "5-6 días", "7 días (Diario)"]: self.justificacion += "-> Elevado consumo de ultraprocesados.\n"
-            if self.dieta.get('verduras') in ["0 días (Nunca)", "1-2 días"]: self.justificacion += "-> Carencia crítica de micronutrientes y fibra vegetal.\n"
-            if self.sintomas_seleccionados: self.justificacion += f"-> Síntomas a vigilar: {', '.join(self.sintomas_seleccionados)}."
+        # 1. Análisis Biométrico (IMC)
+        cat_imc = "Normopeso"
+        if self.imc < 18.5: cat_imc = "Bajo Peso (Riesgo de Desnutrición)"
+        elif 25 <= self.imc < 30: cat_imc = "Sobrepeso Grado I"
+        elif self.imc >= 30: cat_imc = "Obesidad Clínica"
+        
+        self.diagnostico_final += f"VALORACIÓN ANTROPOMÉTRICA:\n"
+        self.diagnostico_final += f"- El paciente presenta un IMC de {self.imc}, clasificado como {cat_imc}.\n"
+        
+        # 2. Análisis de Descanso
+        if self.horas_sueno < 6:
+            self.diagnostico_final += f"- Alerta: Privación de sueño ({self.horas_sueno}h). Interferencia directa en la recuperación metabólica.\n"
         else:
-            self.diagnostico_final += "No se detectan alteraciones graves. Mantener el estilo de vida actual."
-            self.justificacion += "\nLos hábitos dietéticos y el descanso se encuentran en equilibrio con el estado físico reportado."
+            self.diagnostico_final += f"- Patrón de descanso adecuado ({self.horas_sueno}h).\n"
+
+        self.diagnostico_final += "\nDIAGNÓSTICO PRESUNTIVO:\n"
+        
+        # 3. Lógica de Diagnóstico Principal
+        if self.hipotesis and self.hipotesis[0][0] != "Estado Nutricional Aparentemente Adecuado":
+            principal = self.hipotesis[0]
+            self.diagnostico_final += f"Se detecta con una probabilidad del {principal[1]}: {principal[0]}.\n"
+            
+            # Justificación Detallada
+            self.justificacion = "JUSTIFICACIÓN TÉCNICA DEL MOTOR DE INFERENCIA:\n"
+            self.justificacion += "-------------------------------------------\n"
+            
+            # Cruce de datos para la justificación
+            d = self.dieta
+            s = self.sintomas_seleccionados
+            
+            if "Fatiga extrema" in s and d.get("carne") in ["0 días (Nunca)", "1-2 días"]:
+                self.justificacion += "- Correlación detectada entre Fatiga y baja ingesta de proteínas/hierro hemínico.\n"
+            
+            if d.get("verduras") in ["0 días (Nunca)", "1-2 días"]:
+                self.justificacion += "- Déficit crítico de fibra y micronutrientes (vitaminas hidrosolubles).\n"
+            
+            if d.get("bolleria") in ["3-4 días", "5-6 días", "7 días (Diario)"]:
+                self.justificacion += "- Exceso de ácidos grasos trans y azúcares simples, lo que explica el riesgo metabólico.\n"
+                
+            if "Niebla mental" in s and self.horas_sueno < 6:
+                self.justificacion += "- La sintomatología cognitiva (niebla mental) se vincula directamente con el déficit de sueño profundo.\n"
+
+        else:
+            self.diagnostico_final += "No se observan patologías nutricionales agudas bajo los parámetros actuales.\n"
+            self.justificacion = "El motor de reglas no ha detectado discrepancias significativas entre la ingesta reportada y el estado físico."
+
+        self.justificacion += f"\n\nObservaciones: Este informe ha sido generado mediante el motor de reglas estáticas del sistema ISSBC."
