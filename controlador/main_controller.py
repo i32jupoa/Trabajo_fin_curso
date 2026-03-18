@@ -3,7 +3,6 @@ from PyQt6.QtWidgets import QMessageBox, QTableWidgetItem, QFileDialog
 from PyQt6.QtCore import QThread, pyqtSignal
 from vista.dialogos_view import DialogoHipotesis, DialogoTexto, DialogoPDFs, DialogoWeb
 
-# Hilo para que la UI no se bloquee mientras la IA piensa
 class WorkerIA(QThread):
     finished = pyqtSignal()
     
@@ -21,7 +20,7 @@ class ControladorNutricion:
         self.vista = vista
         self.hilo_ia = WorkerIA(self.modelo)
         self.hilo_ia.finished.connect(self.on_ia_terminada)
-        self.accion_pendiente = "" # Para saber qué ventana abrir tras pensar
+        self.accion_pendiente = "" 
         self.conectar_senales()
 
     def conectar_senales(self):
@@ -36,11 +35,17 @@ class ControladorNutricion:
         sintomas = self.vista.obtener_sintomas_marcados()
         imc = self.vista.spin_imc.value()
         sueno = self.vista.spin_sueno.value()
+        
+        # Dieta precisa (recuerda que cambiamos bolleria por basura en el controlador anterior)
         dieta = {
-            "carne": self.vista.combo_carne.currentText(),
+            "verduras": self.vista.combo_verduras.currentText(),
+            "frutas": self.vista.combo_frutas.currentText(),
+            "cereales": self.vista.combo_cereales.currentText(),
+            "frutos_secos": self.vista.combo_frutos_secos.currentText(),
             "pescado": self.vista.combo_pescado.currentText(),
-            "frutas_verduras": self.vista.combo_frutas.currentText(),
-            "lacteos": self.vista.combo_lacteos.currentText()
+            "carne": self.vista.combo_carne.currentText(),
+            "bolleria": self.vista.combo_bolleria.currentText(),
+            "basura": self.vista.combo_basura.currentText()
         }
         self.modelo.actualizar_datos_paciente(sintomas, imc, sueno, dieta)
 
@@ -49,7 +54,7 @@ class ControladorNutricion:
 
     def procesar_hipotesis(self):
         self.actualizar_datos_basicos()
-        self.modelo.simular_hipotesis_base() # Rápido, sin IA pesada
+        self.modelo.simular_hipotesis_base() 
         dialogo = DialogoHipotesis(self.vista)
         dialogo.tabla.setRowCount(len(self.modelo.hipotesis))
         for row, (nombre, prob, estado) in enumerate(self.modelo.hipotesis):
@@ -58,34 +63,29 @@ class ControladorNutricion:
             dialogo.tabla.setItem(row, 2, QTableWidgetItem(estado))
         dialogo.exec()
 
-    # --- INICIO BLOQUE ASÍNCRONO ---
     def iniciar_procesamiento_ia(self, accion):
         self.actualizar_datos_basicos()
         self.accion_pendiente = accion
-        
-        # Bloquear botones y avisar al usuario
-        self.vista.btn_diagnosticar.setText("Generando IA...")
+        # Texto limpio sin emoticonos
+        self.vista.btn_diagnosticar.setText("Analizando paciente (TinyLlama)...")
         self.vista.btn_diagnosticar.setEnabled(False)
         self.vista.btn_justificacion.setEnabled(False)
-        
-        self.hilo_ia.start() # Lanza la IA en segundo plano
+        self.hilo_ia.start() 
 
     def on_ia_terminada(self):
-        # Desbloquear botones
-        self.vista.btn_diagnosticar.setText("2. Diagnosticar")
+        # Texto limpio al terminar
+        self.vista.btn_diagnosticar.setText("Generar Diagnóstico IA")
         self.vista.btn_diagnosticar.setEnabled(True)
         self.vista.btn_justificacion.setEnabled(True)
         
-        # Abrir la ventana solicitada
         if self.accion_pendiente == "diagnostico":
-            dialogo = DialogoTexto("Diagnóstico Final (LLM)", self.vista)
+            dialogo = DialogoTexto("Diagnóstico Médico (TinyLlama)", self.vista)
             dialogo.texto.setText(self.modelo.diagnostico_final)
             dialogo.exec()
         elif self.accion_pendiente == "justificacion":
-            dialogo = DialogoTexto("Justificación y Razonamiento", self.vista)
+            dialogo = DialogoTexto("Informe Científico Detallado", self.vista)
             dialogo.texto.setText(self.modelo.justificacion)
             dialogo.exec()
-    # --- FIN BLOQUE ASÍNCRONO ---
 
     def abrir_gestion_pdfs(self):
         dialogo = DialogoPDFs(self.vista)
@@ -95,7 +95,7 @@ class ControladorNutricion:
             rutas, _ = QFileDialog.getOpenFileNames(dialogo, "Seleccionar PDFs", "", "PDF Files (*.pdf)")
             for ruta in rutas:
                 if ruta not in self.modelo.rutas_pdfs:
-                    self.modelo.rutas_pdfs.append(ruta) # Guarda ruta absoluta para el modelo
+                    self.modelo.rutas_pdfs.append(ruta) 
                     nombre = ruta.split("/")[-1]
                     self.modelo.pdfs_cargados.append(nombre)
                     dialogo.lista_pdfs.addItem(nombre)
@@ -120,7 +120,7 @@ class ControladorNutricion:
 
     def abrir_fuentes_web(self):
         if not self.modelo.modo_web:
-            QMessageBox.warning(self.vista, "Modo Local", "El Modo Web está desactivado. Actívelo en la ventana principal.")
+            QMessageBox.warning(self.vista, "Modo Local", "Debe activar el Modo Web para auditar fuentes de internet.")
             return
         dialogo = DialogoWeb(self.vista)
         dialogo.tabla.setRowCount(len(self.modelo.fuentes_web))
